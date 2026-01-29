@@ -1,114 +1,86 @@
-name: test
+name: Test
 on:
-  pull_request:
   push:
-  workflow_dispatch:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
 
 env:
-  MYSQL_TEST_USER: gotest
-  MYSQL_TEST_PASS: secret
-  MYSQL_TEST_ADDR: 127.0.0.1:3306
-  MYSQL_TEST_CONCURRENT: 1
+  S2_TEST_USER: root
+  S2_TEST_PASS: ${{ secrets.SINGLESTORE_PASSWORD }}
+  S2_TEST_PORT: 5506
+  S2_TEST_ADDR: 127.0.0.1:5506
+  S2_TEST_DB_NAME: gotest
+  S2_TEST_CONCURRENT: 0
 
 jobs:
-  lint:
+  fetch-s2-versions:
     runs-on: ubuntu-latest
+    outputs:
+      versions: ${{ steps.get_versions.outputs.versions }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dominikh/staticcheck-action@v1.3.1
+      - name: Get supported versions of SingleStore
+        id: get_versions
+        uses: singlestore-labs/singlestore-supported-versions@main
+        with:
+          include_rc: true
 
-  list:
+  generate-matrix:
     runs-on: ubuntu-latest
+    needs: fetch-s2-versions
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-      - name: list
+      - name: Build pairs of Go and SingleStore versions
         id: set-matrix
+        env:
+          S2_VERSIONS: ${{ needs.fetch-s2-versions.outputs.versions }}
         run: |
-          import json
-          import os
-          go = [
-              # Keep the most recent production release at the top
-              '1.23',
-              # Older production releases
-              '1.22',
-              '1.21',
-          ]
-          mysql = [
-              '9.0',
-              '8.4', # LTS
-              '8.0',
-              '5.7',
-              'mariadb-11.4',   # LTS
-              'mariadb-11.2',
-              'mariadb-11.1',
-              'mariadb-10.11',  # LTS
-              'mariadb-10.6',   # LTS
-              'mariadb-10.5',   # LTS
-          ]
-
-          includes = []
-          # Go versions compatibility check
-          for v in go[1:]:
-              includes.append({'os': 'ubuntu-latest', 'go': v, 'mysql': mysql[0]})
-
-          matrix = {
-              # OS vs MySQL versions
-              'os': [ 'ubuntu-latest', 'macos-latest', 'windows-latest' ],
-              'go': [ go[0] ],
-              'mysql': mysql,
-
-              'include': includes
-          }
-          output = json.dumps(matrix, separators=(',', ':'))
-          with open(os.environ["GITHUB_OUTPUT"], 'a', encoding="utf-8") as f:
-              print(f"matrix={output}", file=f)
+          import itertools, json, os
+          go_versions = ["1.21", "1.22", "1.23", "1.24"]
+          s2_versions = json.loads(os.environ['S2_VERSIONS'])
+          if len(go_versions) <= len(s2_versions):
+            pairs = list(zip(itertools.cycle(go_versions), s2_versions))
+          else:
+            pairs = list(zip(go_versions, itertools.cycle(s2_versions)))
+          matrix = json.dumps({"include":[{"go":g,"singlestore_version":s} for g,s in pairs]})
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+            f.write(f"matrix={matrix}\n")
         shell: python
+
   test:
-    needs: list
-    runs-on: ${{ matrix.os }}
+    needs: generate-matrix
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.list.outputs.matrix) }}
+      matrix: ${{ fromJSON(needs.generate-matrix.outputs.matrix) }}
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go }}
-      - uses: shogo82148/actions-setup-mysql@v1
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v9
         with:
-          mysql-version: ${{ matrix.mysql }}
-          user: ${{ env.MYSQL_TEST_USER }}
-          password: ${{ env.MYSQL_TEST_PASS }}
-          my-cnf: |
-            innodb_log_file_size=256MB
-            innodb_buffer_pool_size=512MB
-            max_allowed_packet=48MB
-            ; TestConcurrent fails if max_connections is too large
-            max_connections=50
-            local_infile=1
-            performance_schema=on
-      - name: setup database
+          version: v2.8.0
+
+      - name: Install MySQL client
         run: |
-          mysql --user 'root' --host '127.0.0.1' -e 'create database gotest;'
+          sudo apt-get update
+          sudo apt-get install -y mysql-client
 
-      - name: test
+      - name: Setup test cluster
+        run: ./.github/scripts/setup-singlestore-dev.sh
+        env:
+          SINGLESTORE_LICENSE: ${{ secrets.SINGLESTORE_LICENSE }}
+          ROOT_PASSWORD: ${{ secrets.SINGLESTORE_PASSWORD }}
+          SINGLESTORE_VERSION: ${{ matrix.singlestore_version }}
+
+      - name: Run tests
         run: |
-          go test -v '-race' '-covermode=atomic' '-coverprofile=coverage.out' -parallel 10
-
-      - name: Send coverage
-        uses: shogo82148/actions-goveralls@v1
-        with:
-          path-to-profile: coverage.out
-          flag-name: ${{ runner.os }}-Go-${{ matrix.go }}-DB-${{ matrix.mysql }}
-          parallel: true
-
-  # notifies that all test jobs are finished.
-  finish:
-    needs: test
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
-      - uses: shogo82148/actions-goveralls@v1
-        with:
-          parallel-finished: true
+          go test -v -race

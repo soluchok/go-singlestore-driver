@@ -121,7 +121,7 @@ func BenchmarkExec(b *testing.B) {
 	db.SetMaxIdleConns(concurrencyLevel)
 	defer db.Close()
 
-	stmt := tb.checkStmt(db.Prepare("DO 1"))
+	stmt := tb.checkStmt(db.Prepare("SELECT 1"))
 	defer stmt.Close()
 
 	remain := int64(b.N)
@@ -301,7 +301,7 @@ func benchmarkExecContext(b *testing.B, db *sql.DB, p int) {
 	db.SetMaxIdleConns(p * runtime.GOMAXPROCS(0))
 
 	tb := (*TB)(b)
-	stmt := tb.checkStmt(db.PrepareContext(ctx, "DO 1"))
+	stmt := tb.checkStmt(db.PrepareContext(ctx, "SELECT 1"))
 	defer stmt.Close()
 
 	b.SetParallelism(p)

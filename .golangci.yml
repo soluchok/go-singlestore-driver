@@ -1,0 +1,31 @@
+version: "2"
+run:
+  tests: false
+  allow-parallel-runners: true
+linters:
+  default: none
+  enable:
+    - govet
+    - misspell
+    - staticcheck
+    - unparam
+    - unused
+  exclusions:
+    generated: lax
+    rules:
+      - path: (.+)\.go$
+        text: it will be inferred from the right-hand side
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
