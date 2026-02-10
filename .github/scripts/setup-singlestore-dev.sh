@@ -10,8 +10,6 @@ IMAGE_NAME="ghcr.io/singlestore-labs/singlestoredb-dev:latest"
 CONTAINER_NAME="singlestore-integration-go-driver"
 
 S2_MASTER_PORT=${S2_TEST_PORT:-5506}
-S2_AGG_PORT_1=${S2_AGG_PORT_1:-5507}
-S2_AGG_PORT_2=${S2_AGG_PORT_2:-5508}
 SINGLESTORE_PASSWORD=${S2_TEST_PASS:-p}
 TEST_DATABASE=${S2_TEST_DB_NAME:-gotest}
 
@@ -36,7 +34,7 @@ if [[ "${EXISTS}" -eq 0 ]]; then
         -e SINGLESTORE_LICENSE=${SINGLESTORE_LICENSE} \
         -e ROOT_PASSWORD="${SINGLESTORE_PASSWORD}" \
         -e SINGLESTORE_VERSION=${VERSION} \
-        -p ${S2_MASTER_PORT}:3306 -p ${S2_AGG_PORT_1}:3307 -p ${S2_AGG_PORT_2}:3308 \
+        -p ${S2_MASTER_PORT}:3306 \
         ${IMAGE_NAME}
 fi
 
@@ -54,16 +52,6 @@ singlestore-wait-start() {
 
 singlestore-wait-start
 
-if [[ "${EXISTS}" -eq 0 ]]; then
-    echo
-    echo "Creating aggregator nodes"
-    docker exec ${CONTAINER_NAME} memsqlctl create-node --yes --password ${SINGLESTORE_PASSWORD} --port 3308
-    docker exec ${CONTAINER_NAME} memsqlctl update-config --yes --all --key minimum_core_count --value 0
-    docker exec ${CONTAINER_NAME} memsqlctl update-config --yes --all --key minimum_memory_mb --value 0
-    docker exec ${CONTAINER_NAME} memsqlctl start-node --yes --all
-    docker exec ${CONTAINER_NAME} memsqlctl add-aggregator --yes --host 127.0.0.1 --password ${SINGLESTORE_PASSWORD} --port 3308
-fi
-
 echo
 echo "Setting up JWT"
 docker exec ${CONTAINER_NAME} memsqlctl update-config --yes --all --key jwt_auth_config_file --value /test-jwt/jwt_auth_config.json
@@ -79,10 +67,7 @@ singlestore-wait-start
 
 echo "Setting up root-ssl user"
 mysql -u root -h 127.0.0.1 -P $S2_MASTER_PORT -p"${SINGLESTORE_PASSWORD}" -e 'CREATE USER IF NOT EXISTS "root-ssl"@"%" REQUIRE SSL'
-mysql -u root -h 127.0.0.1 -P $S2_AGG_PORT_1  -p"${SINGLESTORE_PASSWORD}" -e 'CREATE USER IF NOT EXISTS "root-ssl"@"%" REQUIRE SSL'
-
 mysql -u root -h 127.0.0.1 -P $S2_MASTER_PORT -p"${SINGLESTORE_PASSWORD}" -e 'GRANT ALL PRIVILEGES ON *.* TO "root-ssl"@"%" WITH GRANT OPTION'
-mysql -u root -h 127.0.0.1 -P $S2_AGG_PORT_1  -p"${SINGLESTORE_PASSWORD}" -e 'GRANT ALL PRIVILEGES ON *.* TO "root-ssl"@"%" WITH GRANT OPTION'
 echo "Done!"
 
 echo
@@ -94,13 +79,6 @@ if [[ ${CONTAINER_IP} != "${CURRENT_LEAF_IP}" ]]; then
     mysql -u root -h 127.0.0.1 -P $S2_MASTER_PORT -p"${SINGLESTORE_PASSWORD}" --batch -N -e "REMOVE LEAF '${CURRENT_LEAF_IP}':3307"
     # add leaf with correct ip
     mysql -u root -h 127.0.0.1 -P $S2_MASTER_PORT -p"${SINGLESTORE_PASSWORD}" --batch -N -e "ADD LEAF root:'${SINGLESTORE_PASSWORD}'@'${CONTAINER_IP}':3307"
-fi
-CURRENT_AGG_IP=$(mysql -u root -h 127.0.0.1 -P $S2_MASTER_PORT -p"${SINGLESTORE_PASSWORD}" --batch -N -e 'SELECT host FROM information_schema.aggregators WHERE master_aggregator=0')
-if [[ ${CONTAINER_IP} != "${CURRENT_AGG_IP}" ]]; then
-    # remove aggregator with current ip
-    mysql -u root -h 127.0.0.1 -P $S2_MASTER_PORT -p"${SINGLESTORE_PASSWORD}" --batch -N -e "REMOVE AGGREGATOR '${CURRENT_AGG_IP}':3308"
-    # add aggregator with correct ip
-    mysql -u root -h 127.0.0.1 -P $S2_MASTER_PORT -p"${SINGLESTORE_PASSWORD}" --batch -N -e "ADD AGGREGATOR root:'${SINGLESTORE_PASSWORD}'@'${CONTAINER_IP}':3308"
 fi
 echo "Done!"
 
