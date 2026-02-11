@@ -456,7 +456,7 @@ func TestSkipParseNumbers(t *testing.T) {
 		t.Skipf("MySQL server not running on %s", netAddr)
 	}
 
-	db, err := sql.Open(driverNameTest, dsn + "&skipParseNumbers=true&interpolateParams=true")
+	db, err := sql.Open(driverNameTest, dsn+"&skipParseNumbers=true&interpolateParams=true")
 	if err != nil {
 		t.Fatalf("error connecting: %s", err.Error())
 	}
@@ -471,7 +471,7 @@ func TestSkipParseNumbers(t *testing.T) {
 	dbt.mustExec("CREATE TABLE TestSkipParseNumbers (id INT PRIMARY KEY, b BOOL, i8 TINYINT, " +
 		"i16 SMALLINT, i32 INT, i64 BIGINT, f32 FLOAT, f64 DOUBLE, iu32 INT UNSIGNED)")
 	dbt.mustExec("INSERT INTO TestSkipParseNumbers VALUES (1, true, 127, 32767, 2147483647, 9223372036854775807, 1.25, 2.5, 4294967295)")
-	
+
 	rows := dbt.mustQuery("SELECT b, i8, i16, i32, i64, f32, f64, iu32 FROM TestSkipParseNumbers WHERE id=?", 1)
 	if !rows.Next() {
 		dbt.Fatal("no data")
@@ -1036,7 +1036,7 @@ func TestDateTime(t *testing.T) {
 						// fix setup.s - remove the "!"
 						setup.s = setup.s[1:]
 					}
-					if !zeroDateSupported && ((setup.s == tstr0[:len(setup.s)]) || 
+					if !zeroDateSupported && ((setup.s == tstr0[:len(setup.s)]) ||
 						(setup.t.IsZero() && binaryTime.Binary())) {
 						// skip disallowed 0000-00-00 date
 						// in binary case, SELECT cast('0000-00-00' as TIME(0)) is generated and fails
@@ -2723,7 +2723,8 @@ func TestPingContext(t *testing.T) {
 }
 
 func TestContextCancelExec(t *testing.T) {
-	runTestsParallel(t, dsn, func(dbt *DBTest, tbl string) {
+	// enable context cancellation for this test
+	runTestsParallel(t, dsn+"&ctxCancellationEnabled=true", func(dbt *DBTest, tbl string) {
 		dbt.mustExec("CREATE TABLE " + tbl + " (v INTEGER)")
 		ctx, cancel := context.WithCancel(context.Background())
 
@@ -2732,11 +2733,11 @@ func TestContextCancelExec(t *testing.T) {
 
 		// Use a longer SLEEP to ensure the query is actually running when canceled
 		startTime := time.Now()
-		if _, err := dbt.db.ExecContext(ctx, "INSERT INTO " + tbl + " VALUES (SLEEP(3))"); err != context.Canceled {
+		if _, err := dbt.db.ExecContext(ctx, "INSERT INTO "+tbl+" VALUES (SLEEP(3))"); err != context.Canceled {
 			dbt.Errorf("expected context.Canceled, got %v", err)
 		}
 		// Should return much faster than 3 seconds if cancellation worked
-		if d := time.Since(startTime); d > 2 * time.Second {
+		if d := time.Since(startTime); d > 2*time.Second {
 			dbt.Errorf("too long execution time: %s (query may not have been killed)", d)
 		}
 
@@ -2770,7 +2771,8 @@ func TestContextCancelExec(t *testing.T) {
 }
 
 func TestContextCancelQuery(t *testing.T) {
-	runTestsParallel(t, dsn, func(dbt *DBTest, tbl string) {
+	// enable context cancellation for this test
+	runTestsParallel(t, dsn+"&ctxCancellationEnabled=true", func(dbt *DBTest, tbl string) {
 		dbt.mustExec("CREATE TABLE " + tbl + " (v INTEGER)")
 		ctx, cancel := context.WithCancel(context.Background())
 
@@ -2782,7 +2784,7 @@ func TestContextCancelQuery(t *testing.T) {
 
 		// Use a longer SLEEP to ensure the query is actually running when canceled
 		startTime := time.Now()
-		if _, err := dbt.db.QueryContext(ctx, "INSERT INTO " + tbl + " VALUES (SLEEP(3))"); err != context.Canceled {
+		if _, err := dbt.db.QueryContext(ctx, "INSERT INTO "+tbl+" VALUES (SLEEP(3))"); err != context.Canceled {
 			dbt.Errorf("expected context.Canceled, got %v", err)
 		}
 		// Should return much faster than 3 seconds if cancellation worked
@@ -2861,16 +2863,17 @@ func TestContextCancelPrepare(t *testing.T) {
 }
 
 func TestContextCancelStmtExec(t *testing.T) {
-	runTestsParallel(t, dsn, func(dbt *DBTest, tbl string) {
+	// enable context cancellation for this test
+	runTestsParallel(t, dsn+"&ctxCancellationEnabled=true", func(dbt *DBTest, tbl string) {
 		dbt.mustExec("CREATE TABLE " + tbl + " (v INTEGER)")
 		ctx, cancel := context.WithCancel(context.Background())
-		stmt, err := dbt.db.PrepareContext(ctx, "INSERT INTO " + tbl + " VALUES (SLEEP(3))")
+		stmt, err := dbt.db.PrepareContext(ctx, "INSERT INTO "+tbl+" VALUES (SLEEP(3))")
 		if err != nil {
 			dbt.Fatalf("unexpected error: %v", err)
 		}
 
 		// Use some sleep to ensure query starts and is running
-		defer time.AfterFunc(500 * time.Millisecond, cancel).Stop()
+		defer time.AfterFunc(500*time.Millisecond, cancel).Stop()
 
 		// Use a longer SLEEP to ensure the query is actually running when canceled
 		startTime := time.Now()
@@ -2878,7 +2881,7 @@ func TestContextCancelStmtExec(t *testing.T) {
 			dbt.Errorf("expected context.Canceled, got %v", err)
 		}
 		// Should return much faster than 3 seconds if cancellation worked
-		if d := time.Since(startTime); d > 2 * time.Second {
+		if d := time.Since(startTime); d > 2*time.Second {
 			dbt.Errorf("too long execution time: %s (query may not have been killed)", d)
 		}
 
@@ -2897,7 +2900,8 @@ func TestContextCancelStmtExec(t *testing.T) {
 }
 
 func TestContextCancelStmtQuery(t *testing.T) {
-	runTestsParallel(t, dsn, func(dbt *DBTest, tbl string) {
+	// enable context cancellation for this test
+	runTestsParallel(t, dsn+"&ctxCancellationEnabled=true", func(dbt *DBTest, tbl string) {
 		dbt.mustExec("CREATE TABLE " + tbl + " (v INTEGER)")
 		ctx, cancel := context.WithCancel(context.Background())
 		stmt, err := dbt.db.PrepareContext(ctx, "INSERT INTO "+tbl+" VALUES (SLEEP(3))")
@@ -2906,7 +2910,7 @@ func TestContextCancelStmtQuery(t *testing.T) {
 		}
 
 		// Use some sleep to ensure query starts and is running
-		defer time.AfterFunc(500 * time.Millisecond, cancel).Stop()
+		defer time.AfterFunc(500*time.Millisecond, cancel).Stop()
 
 		// Use a longer SLEEP to ensure the query is actually running when canceled
 		startTime := time.Now()
@@ -2914,7 +2918,7 @@ func TestContextCancelStmtQuery(t *testing.T) {
 			dbt.Errorf("expected context.Canceled, got %v", err)
 		}
 		// Should return much faster than 3 seconds if cancellation worked
-		if d := time.Since(startTime); d > 2 * time.Second {
+		if d := time.Since(startTime); d > 2*time.Second {
 			dbt.Errorf("too long execution time: %s (query may not have been killed)", d)
 		}
 
@@ -3106,9 +3110,9 @@ func TestRowsColumnTypes(t *testing.T) {
 	b42 := []byte("42")
 	nsTest := ns("Test")
 	bTest := []byte("Test")
-	b0pad4 := []byte("0\x00\x00\x00") // BINARY right-pads values with 0x00
-	bx0 := []byte("\x00\x00\x00\x00\x00\x00\x00\x00")   // in SingleStore BIT(8) is left-padded to 8 bytes
-	bx42 := []byte("\x00\x00\x00\x00\x00\x00\x00\x42")  // in SingleStore BIT(8) is left-padded to 8 bytes
+	b0pad4 := []byte("0\x00\x00\x00")                  // BINARY right-pads values with 0x00
+	bx0 := []byte("\x00\x00\x00\x00\x00\x00\x00\x00")  // in SingleStore BIT(8) is left-padded to 8 bytes
+	bx42 := []byte("\x00\x00\x00\x00\x00\x00\x00\x42") // in SingleStore BIT(8) is left-padded to 8 bytes
 
 	var columns = []struct {
 		name             string

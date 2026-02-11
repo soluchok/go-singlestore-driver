@@ -51,9 +51,9 @@ type mysqlConn struct {
 	closed   atomic.Bool // set when conn is closed, before closech is closed
 
 	// for query cancellation
-	connInfoMu    sync.RWMutex
-	connectionID  int64
-	aggregatorID  int64
+	connInfoMu   sync.RWMutex
+	connectionID int64
+	aggregatorID int64
 }
 
 // Helper function to call per-connection logger.
@@ -538,8 +538,12 @@ func (mc *mysqlConn) fetchConnectionInfo() error {
 // cancel is called when the query has canceled.
 func (mc *mysqlConn) cancel(err error) {
 	mc.canceled.Set(err)
-	// Try to kill the running query before cleanup
-	mc.killQuery()
+
+	// if context cancellation is enabled, try to kill the running query before cleanup
+	if mc.cfg.CtxCancellationEnabled {
+		mc.killQuery()
+	}
+
 	mc.cleanup()
 }
 

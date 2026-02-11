@@ -72,11 +72,11 @@ type Config struct {
 	ParseTime                bool // Parse time values to time.Time
 	SkipParseNumbers         bool // Don't parse integers and float/double values to native go types
 	RejectReadOnly           bool // Reject read-only connections
-
+	CtxCancellationEnabled   bool // Enable context cancellation support.
 	// unexported fields. new options should be come here.
 	// boolean first. alphabetical order.
 
-	compress bool       // Enable zlib compression
+	compress bool // Enable zlib compression
 
 	beforeConnect func(context.Context, *Config) error // Invoked before a connection is established
 	pubKey        *rsa.PublicKey                       // Server public key
@@ -381,6 +381,10 @@ func (cfg *Config) FormatDSN() string {
 
 	if cfg.MaxAllowedPacket != defaultMaxAllowedPacket {
 		writeDSNParam(&buf, &hasParam, "maxAllowedPacket", strconv.Itoa(cfg.MaxAllowedPacket))
+	}
+
+	if cfg.CtxCancellationEnabled {
+		writeDSNParam(&buf, &hasParam, "ctxCancellationEnabled", "true")
 	}
 
 	// other params
@@ -690,6 +694,14 @@ func parseDSNParams(cfg *Config, params string) (err error) {
 				return fmt.Errorf("invalid connectionAttributes value: %v", err)
 			}
 			cfg.ConnectionAttributes = connectionAttributes
+
+		// Context cancellation support
+		case "ctxCancellationEnabled":
+			var isBool bool
+			cfg.CtxCancellationEnabled, isBool = readBool(value)
+			if !isBool {
+				return errors.New("invalid bool value: " + value)
+			}
 
 		default:
 			// lazy init
