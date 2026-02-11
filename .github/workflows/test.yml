@@ -7,6 +7,12 @@ on:
     branches:
       - master
   workflow_call:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to test'
+        required: true
+        type: number
 
 env:
   S2_TEST_USER: root
@@ -60,6 +66,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.pr_number && format('refs/pull/{0}/merge', github.event.inputs.pr_number) || github.ref }}
 
       - uses: actions/setup-go@v5
         with:
