@@ -28,3 +28,24 @@ func TestConnectorReturnsTimeout(t *testing.T) {
 		t.Fatalf("expected %T, got %T", nerr, err)
 	}
 }
+
+func TestDisableFetchConnectionInfo(t *testing.T) {
+	ctx := context.Background()
+
+	if isFetchConnectionInfoDisabled(ctx) {
+		t.Fatal("expected fetch connection info to be enabled")
+	}
+
+	// disable fetch connection info
+	ctx = disableFetchConnectionInfo(ctx)
+
+	if !isFetchConnectionInfoDisabled(ctx) {
+		t.Fatal("expected fetch connection info to be disabled")
+	}
+
+	// verify that using a different struct{} value doesn't work
+	ctx = context.WithValue(context.Background(), struct{}{}, struct{}{})
+	if isFetchConnectionInfoDisabled(ctx) {
+		t.Fatal("external code should not be able to disable fetch connection info")
+	}
+}

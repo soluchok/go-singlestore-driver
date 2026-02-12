@@ -218,7 +218,7 @@ func (c *connector) Connect(ctx context.Context) (driver.Conn, error) {
 		return nil, err
 	}
 
-	if mc.cfg.CtxCancellationEnabled {
+	if mc.cfg.CtxCancellationEnabled && !isFetchConnectionInfoDisabled(ctx) {
 		// Fetch connection_id and aggregator_id for query cancellation support
 		if err = mc.fetchConnectionInfo(); err != nil {
 			mc.Close()
@@ -227,6 +227,17 @@ func (c *connector) Connect(ctx context.Context) (driver.Conn, error) {
 	}
 
 	return mc, nil
+}
+
+type fetchConnectionInfoKey struct{}
+
+func disableFetchConnectionInfo(ctx context.Context) context.Context {
+	return context.WithValue(ctx, fetchConnectionInfoKey{}, struct{}{})
+}
+
+func isFetchConnectionInfoDisabled(ctx context.Context) bool {
+	_, ok := ctx.Value(fetchConnectionInfoKey{}).(struct{})
+	return ok
 }
 
 // Driver implements driver.Connector interface.

@@ -569,7 +569,7 @@ func (mc *mysqlConn) killQuery() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	killConn, err := mc.connector.Connect(ctx)
+	killConn, err := mc.connector.Connect(disableFetchConnectionInfo(ctx))
 	if err != nil {
 		mc.log("failed to create connection for KILL QUERY:", err)
 		return
